@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Admin OS | Root Access</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
+    <style>
+        :root { --neon-purple: #a855f7; --glass-bg: rgba(15, 7, 30, 0.95); }
+        body { 
+            background: #050505; color: white; font-family: 'Rajdhani', sans-serif; 
+            height: 100vh; overflow: hidden; display: flex; flex-direction: column; 
+        }
+        .glass { background: var(--glass-bg); border: 1px solid rgba(168, 85, 247, 0.2); backdrop-filter: blur(20px); }
+        
+        /* Layout Ratio: Mobile Friendly */
+        .main-container { display: flex; flex: 1; overflow: hidden; gap: 10px; padding: 10px; }
+        .file-sidebar { width: 260px; display: flex; flex-direction: column; }
+        .editor-area { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+        @media (max-width: 768px) {
+            .main-container { flex-direction: column; }
+            .file-sidebar { width: 100%; height: 140px; min-height: 140px; }
+            .editor-area { flex: 1; }
+        }
+
+        .file-item { 
+            padding: 12px; font-size: 13px; border-bottom: 1px solid rgba(168, 85, 247, 0.1); 
+            cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; 
+            transition: 0.2s;
+        }
+        .file-item:hover { background: rgba(168, 85, 247, 0.2); }
+        .active-file { background: rgba(168, 85, 247, 0.3); border-left: 4px solid #a855f7; color: #d8b4fe; }
+
+        textarea { 
+            background: #000 !important; color: #a855f7 !important; font-family: 'Courier New', monospace; 
+            resize: none; border-radius: 12px; padding: 15px; border: 1px solid #222; 
+            width: 100%; flex: 1; font-size: 14px; outline: none;
+        }
+        #toast { position: fixed; top: -100px; left: 50%; transform: translateX(-50%); background: #a855f7; padding: 10px 20px; border-radius: 30px; z-index: 5000; transition: 0.5s; font-size: 12px; font-weight: bold; }
+        #toast.show { top: 20px; }
+    </style>
+</head>
+<body>
+
+    <div id="toast">SYSTEM READY</div>
+
+    <div id="auth-gate" class="fixed inset-0 z-[6000] bg-black flex items-center justify-center p-6">
+        <div class="glass p-8 w-full max-w-sm text-center rounded-3xl border-t-4 border-purple-600">
+            <h2 class="text-2xl font-bold mb-6 tracking-widest text-purple-400">ADMIN LOGIN</h2>
+            <input id="adm-pw" type="password" inputmode="numeric" placeholder="PASSKEY" class="w-full p-4 rounded-xl mb-4 bg-black/50 border border-purple-500/30 text-white text-center text-xl outline-none focus:border-purple-500">
+            <button onclick="checkAuth()" class="w-full py-4 bg-purple-600 hover:bg-purple-500 rounded-xl font-bold uppercase tracking-widest transition-all">Unlock OS</button>
+        </div>
+    </div>
+
+    <header class="p-4 glass flex justify-between items-center border-b border-purple-500/20">
+        <div>
+            <h1 class="font-bold text-purple-500 text-lg tracking-tighter">ADMIN <span class="text-white">OS</span></h1>
+            <p id="user-count" class="text-[10px] text-gray-500 uppercase">Sessions: 0</p>
+        </div>
+        <button onclick="sendBroadcast()" class="text-[10px] bg-fuchsia-700/30 border border-fuchsia-500/50 px-4 py-2 rounded-lg font-bold text-fuchsia-400">📢 BROADCAST</button>
+    </header>
+
+    <div id="main-ui" class="hidden main-container">
+        <div class="file-sidebar glass rounded-2xl p-2">
+            <div class="flex justify-between items-center px-2 mb-2">
+                <span class="text-[10px] font-bold text-purple-400 uppercase tracking-widest">File Explorer</span>
+                <button onclick="refreshFiles()" class="text-xs opacity-50 hover:opacity-100">🔄</button>
+            </div>
+            <div id="file-list" class="overflow-y-auto flex-1">
+                </div>
+        </div>
+
+        <div class="editor-area glass rounded-2xl p-4">
+            <div class="flex justify-between items-center mb-3">
+                <span id="active-file-name" class="text-[11px] font-mono text-fuchsia-400 truncate uppercase">No file selected</span>
+                <span id="status-tag" class="text-[9px] text-gray-500">STANDBY</span>
+            </div>
+            
+            <textarea id="editor" spellcheck="false" placeholder="Select a file to modify..."></textarea>
+            
+            <div class="mt-4">
+                <button id="save-btn" onclick="saveFile()" class="w-full py-5 bg-purple-700 hover:bg-purple-600 active:scale-95 transition-all rounded-2xl font-bold text-xs uppercase tracking-widest shadow-lg shadow-purple-900/40">
+                    💾 Save Changes to Server
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        let currentPass = "";
+        let currentFile = "";
+
+        function showMsg(t) {
+            const e = document.getElementById('toast'); e.innerText = t; e.classList.add('show');
+            setTimeout(() => e.classList.remove('show'), 3000);
+        }
+
+        function checkAuth() {
+            const p = document.getElementById('adm-pw').value;
+            if(p === "8012") {
+                currentPass = p;
+                document.getElementById('auth-gate').style.display = 'none';
+                document.getElementById('main-ui').classList.remove('hidden');
+                refreshFiles();
+                showMsg("ACCESS GRANTED");
+            } else { showMsg("DENIED"); }
+        }
+
+        async function refreshFiles() {
+            try {
+                const res = await fetch('/api/admin/action', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ action: 'list_files', passkey: currentPass })
+                });
+                const data = await res.json();
+                if(data.status === 'success') {
+                    const list = document.getElementById('file-list');
+                    list.innerHTML = data.files.map(f => `
+                        <div class="file-item ${currentFile === f ? 'active-file' : ''}" onclick="loadFile('${f}')">
+                            📄 ${f}
+                        </div>
+                    `).join('');
+                }
+            } catch(e) { showMsg("SCAN FAILED"); }
+        }
+
+        async function loadFile(name) {
+            currentFile = name;
+            document.getElementById('active-file-name').innerText = "PATH: /" + name;
+            document.getElementById('status-tag').innerText = "LOADING...";
+            
+            try {
+                const res = await fetch('/api/admin/action', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ action: 'read', filename: name, passkey: currentPass })
+                });
+                const data = await res.json();
+                document.getElementById('editor').value = data.content || "";
+                document.getElementById('status-tag').innerText = "READY";
+                refreshFiles();
+            } catch(e) { document.getElementById('status-tag').innerText = "ERROR"; }
+        }
+
+        async function saveFile() {
+            if(!currentFile) return showMsg("SELECT FILE FIRST");
+            
+            const btn = document.getElementById('save-btn');
+            btn.innerText = "⏳ SAVING...";
+            btn.disabled = true;
+
+            try {
+                const content = document.getElementById('editor').value;
+                const res = await fetch('/api/admin/action', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ 
+                        action: 'write', 
+                        filename: currentFile, 
+                        content, 
+                        passkey: currentPass 
+                    })
+                });
+                const data = await res.json();
+                if(data.status === 'success') {
+                    showMsg("SERVER UPDATED");
+                    btn.innerText = "✅ SAVED";
+                } else { throw new Error(); }
+            } catch(e) { showMsg("SAVE FAILED"); btn.innerText = "❌ FAILED"; }
+            
+            setTimeout(() => {
+                btn.innerText = "💾 Save Changes to Server";
+                btn.disabled = false;
+            }, 2000);
+        }
+
+        function sendBroadcast() {
+            const m = prompt("Global Broadcast Message:");
+            if(m) fetch('/api/admin/action', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ action: 'broadcast', message: m, passkey: currentPass })
+            });
+        }
+
+        socket.on('user_count', (d) => {
+            document.getElementById('user-count').innerText = `Sessions: ${d.count}`;
+        });
+    </script>
+</body>
+</html>
