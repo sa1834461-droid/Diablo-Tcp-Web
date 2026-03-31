@@ -235,5 +235,7 @@ def control_bot():
     return jsonify({"status": "error", "message": "ACTION FAILED"})
 
 if __name__ == '__main__':
-    socketio.run(app, host='0.0.0.0', port=10000)
+    # Render provides a PORT environment variable; if not found, use 10000
+    port = int(os.environ.get("PORT", 10000))
+    socketio.run(app, host='0.0.0.0', port=port)
     
