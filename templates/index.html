@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Free trail | Master Panel</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --neon-purple: #a855f7;
+            --neon-fuchsia: #d946ef;
+            --neon-violet: #8b5cf6;
+            --glass-bg: rgba(25, 10, 45, 0.55);
+            --glass-border: rgba(168, 85, 247, 0.25);
+        }
+        body { 
+            background: radial-gradient(circle at top, #1a0b2e 0%, #050505 100%); 
+            font-family: 'Rajdhani', sans-serif; 
+            color: #ffffff; 
+            overflow-x: hidden; 
+            min-height: 100vh;
+        }
+        
+        @keyframes purple-glow {
+            0% { border-color: var(--neon-purple); box-shadow: 0 0 5px var(--neon-purple); }
+            50% { border-color: var(--neon-fuchsia); box-shadow: 0 0 15px var(--neon-fuchsia); }
+            100% { border-color: var(--neon-purple); box-shadow: 0 0 5px var(--neon-purple); }
+        }
+
+        .card-bg { 
+            background: var(--glass-bg); 
+            border-radius: 15px; 
+            border: 1px solid var(--glass-border); 
+            margin-bottom: 12px; 
+            backdrop-filter: blur(12px);
+            transition: 0.3s;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4);
+        }
+        .card-bg:hover { animation: purple-glow 3s infinite linear; }
+
+        .sidebar { position: fixed; left: -100%; top: 0; width: 280px; height: 100%; background: rgba(15, 7, 25, 0.98); z-index: 1000; transition: 0.4s; border-right: 2px solid var(--neon-purple); box-shadow: 5px 0 25px rgba(168, 85, 247, 0.2); backdrop-filter: blur(10px); }
+        .sidebar.active { left: 0; }
+        .overlay { display: none; position: fixed; inset: 0; background: rgba(10, 5, 20, 0.85); z-index: 999; backdrop-filter: blur(5px); }
+        .overlay.active { display: block; }
+
+        .btn-op { padding: 10px; border-radius: 8px; font-weight: bold; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 5px; transition: 0.3s; width: 100%; text-transform: uppercase; letter-spacing: 1px; }
+        .btn-start { background: rgba(168, 85, 247, 0.15); color: #e9d5ff; border: 1px solid var(--neon-purple); }
+        .btn-start:hover { background: var(--neon-purple); color: white; box-shadow: 0 0 15px var(--neon-purple); }
+        .btn-stop { background: rgba(217, 70, 239, 0.1); color: #fdf4ff; border: 1px solid var(--neon-fuchsia); }
+        .btn-stop:hover { background: var(--neon-fuchsia); box-shadow: 0 0 15px var(--neon-fuchsia); }
+        .btn-restart { background: rgba(139, 92, 246, 0.15); color: #ddd6fe; border: 1px solid var(--neon-violet); }
+        .btn-restart:hover { background: var(--neon-violet); box-shadow: 0 0 15px var(--neon-violet); }
+        .btn-force { background: #31133a; color: #f5d0fe; border: 1px solid #701a75; }
+        .btn-util { background: rgba(255, 255, 255, 0.03); color: #94a3b8; border: 1px solid rgba(255,255,255,0.1); }
+        .btn-util:hover { border-color: var(--neon-purple); color: var(--neon-purple); }
+
+        #toast { position: fixed; top: -100px; left: 50%; transform: translateX(-50%); background: #1a0b2e; padding: 12px 25px; border-radius: 30px; border: 2px solid var(--neon-purple); z-index: 2000; transition: 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); color: var(--neon-purple); font-size: 13px; font-weight: bold; box-shadow: 0 0 20px rgba(168, 85, 247, 0.4); }
+        #toast.show { top: 40px; }
+
+        .active-tab { color: var(--neon-purple) !important; background: rgba(168, 85, 247, 0.15); border-left: 4px solid var(--neon-purple); box-shadow: inset 5px 0 15px rgba(168, 85, 247, 0.05); }
+        .console-box { background: rgba(0, 0, 0, 0.5); border-radius: 0 0 15px 15px; padding: 15px; height: 300px; overflow-y: auto; font-family: 'Courier New', monospace; font-size: 11px; color: #d8b4fe; border-top: 1px solid var(--glass-border); scroll-behavior: smooth; }
+        .icon-box { background: rgba(168, 85, 247, 0.1); width: 45px; height: 45px; border-radius: 10px; border: 1px solid var(--glass-border); display: flex; align-items: center; justify-content: center; transition: 0.3s; }
+        
+        input, select { background: rgba(0,0,0,0.3) !important; border: 1px solid var(--glass-border) !important; color: white !important; outline: none; transition: 0.3s; }
+        input:focus, select:focus { border-color: var(--neon-fuchsia) !important; box-shadow: 0 0 10px rgba(217, 70, 239, 0.2); }
+
+        .switch { position: relative; display: inline-block; width: 34px; height: 20px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; inset: 0; background-color: #2a1542; transition: .4s; border-radius: 20px; }
+        .slider:before { position: absolute; content: ""; height: 14px; width: 14px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
+        input:checked + .slider { background-color: var(--neon-purple); box-shadow: 0 0 10px var(--neon-purple); }
+        input:checked + .slider:before { transform: translateX(14px); }
+
+        .rgb-text { background: linear-gradient(90deg, #a855f7, #d946ef, #8b5cf6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: bold; }
+        
+        ::-webkit-scrollbar { width: 5px; }
+        ::-webkit-scrollbar-track { background: #0d0d0d; }
+        ::-webkit-scrollbar-thumb { background: #4c1d95; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--neon-purple); }
+    </style>
+</head>
+<body>
+
+<div id="page-admin" class="hidden space-y-4">
+    <div class="card-bg p-6 border-t-2 border-purple-600">
+        <h3 class="text-purple-400 font-bold mb-4 uppercase text-xs tracking-widest">🛠️ Master Admin Panel</h3>
+        
+        <div id="admin-login-sec">
+            <input id="adm-pw" type="password" placeholder="Admin Passkey" class="w-full p-4 rounded-xl mb-3 text-center border border-purple-500/20">
+            <button onclick="adminLogin()" class="btn-op bg-purple-900/30 text-purple-400 border border-purple-500/30">LOGIN ADMIN</button>
+        </div>
+
+        <div id="admin-dashboard" class="hidden space-y-6">
+            <div class="grid grid-cols-2 gap-4">
+                <div class="bg-black/40 p-4 rounded-xl border border-purple-500/20 text-center">
+                    <p class="text-[10px] text-purple-400 uppercase">Live Users</p>
+                    <h2 id="live-user-count" class="text-2xl font-bold text-white">0</h2>
+                </div>
+                <div class="bg-black/40 p-4 rounded-xl border border-purple-500/20">
+                    <button onclick="sendBroadcast()" class="w-full h-full text-[10px] font-bold text-fuchsia-400 uppercase">📢 Broadcast</button>
+                </div>
+            </div>
+
+            <div class="space-y-2">
+                <p class="text-[10px] text-purple-400 uppercase font-bold">File System Explorer</p>
+                <div class="flex gap-2 mb-2">
+                    <select id="file-selector" class="flex-1 p-2 rounded bg-black border border-purple-900 text-xs">
+                        <option value="main.py">main.py</option>
+                        <option value="app.py">app.py</option>
+                        <option value="index.html">index.html</option>
+                    </select>
+                    <button onclick="loadFile()" class="px-4 bg-purple-700 rounded text-[10px] font-bold">LOAD</button>
+                </div>
+                <textarea id="file-editor" class="w-full h-64 p-4 bg-black/60 border border-purple-500/20 rounded-xl text-xs font-mono text-purple-200 outline-none" placeholder="Select a file to edit..."></textarea>
+                <button onclick="saveFile()" class="btn-op bg-fuchsia-700 text-white mt-2">SAVE & APPLY CHANGES</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+    <div id="toast">SYSTEM ONLINE</div>
+    <div id="overlay" class="overlay" onclick="toggleMenu()"></div>
+
+    <div id="sidebar" class="sidebar p-6">
+        <div class="flex items-center gap-3 mb-10 border-b border-purple-500/20 pb-4">
+            <span class="text-purple-500 text-3xl animate-pulse">🤖</span>
+            <h1 class="text-2xl font-bold rgb-text">DIABLO TCP BOT CONTROL PANEL 🎛️</h1>
+        </div>
+        <nav class="space-y-4">
+            <div onclick="showPage('control')" class="p-4 rounded-xl active-tab cursor-pointer transition-all" id="m-control">🎮 Control Panel</div>
+            <div onclick="showPage('accounts')" class="p-4 rounded-xl text-gray-400 cursor-pointer hover:bg-white/5" id="m-accounts">👥 Accounts</div>
+            <div onclick="showPage('friends')" class="p-4 rounded-xl text-gray-400 cursor-pointer hover:bg-white/5" id="m-friends">👤 Friends</div>
+            <div onclick="showPage('clan')" class="p-4 rounded-xl text-gray-400 cursor-pointer hover:bg-white/5" id="m-clan">🛡️ Clan Search</div>
+            <div onclick="showPage('admin')" class="p-4 rounded-xl text-gray-400 cursor-pointer hover:bg-white/5" id="m-admin">🛠️ Admin Panel</div>
+        </nav>
+    </div>
+
+    <header class="p-5 flex justify-between items-center sticky top-0 z-50 bg-[#0d0d0d]/80 backdrop-blur-md border-b border-purple-500/10">
+        <div class="flex items-center gap-4">
+            <button onclick="toggleMenu()" class="text-2xl text-purple-500 hover:scale-110 transition">☰</button>
+            <h1 id="page-title" class="text-xl font-bold flex items-center gap-2 tracking-tighter uppercase">⚡ Control Panel</h1>
+        </div>
+        <div class="bg-purple-950/40 p-2 px-4 rounded-xl text-[10px] font-bold border border-purple-500/40 text-purple-400 uppercase tracking-widest shadow-[0_0_15px_rgba(168,85,247,0.1)]">
+            DIABLO CODEX
+        </div>
+    </header>
+
+    <main class="p-4 max-w-xl mx-auto">
+        
+        <div id="page-control" class="space-y-3">
+            <div class="card-bg p-4 flex justify-between items-center group">
+                <div>
+                    <p class="text-[10px] text-purple-300 font-bold uppercase tracking-widest">Bot Status</p>
+                    <span id="stext" class="text-fuchsia-500 text-xs font-bold uppercase">Stopped</span>
+                </div>
+                <div class="icon-box text-fuchsia-500 text-xl group-hover:rotate-12">🗣️</div>
+            </div>
+
+            <div class="card-bg p-4 flex justify-between items-center group">
+                <div>
+                    <p class="text-[10px] text-purple-300 font-bold uppercase tracking-widest">Uptime</p>
+                    <h3 id="timer-display" class="text-xl font-bold font-mono text-purple-100">0h 0m 0s</h3>
+                </div>
+                <div class="icon-box text-violet-400 text-xl group-hover:scale-110">🕒</div>
+            </div>
+
+            <div class="card-bg overflow-hidden">
+                <div class="p-4 border-b border-purple-500/20 flex justify-between items-center bg-purple-900/10">
+                    <h3 class="text-xs font-bold uppercase tracking-widest text-purple-200">🎮 Bot Operations</h3>
+                    <label class="switch"><input type="checkbox" checked><span class="slider"></span></label>
+                </div>
+                <div class="p-4 grid grid-cols-3 gap-2">
+                    <button onclick="control('start')" class="btn-op btn-start">▶ Start</button>
+                    <button onclick="control('stop')" class="btn-op btn-stop">■ Stop</button>
+                    <button onclick="control('restart')" class="btn-op btn-restart">🔄 Restart</button>
+                </div>
+                <div class="px-4 pb-4 grid grid-cols-3 gap-2">
+                    <button onclick="msg('FORCE KILL SENT')" class="btn-op btn-force">🚫 Force Kill</button>
+                    <button onclick="document.getElementById('logs').innerHTML=''" class="btn-op btn-util">🗑 Clear</button>
+                    <button onclick="msg('AUTO SCROLL ENABLED')" class="btn-op btn-util">↕ Scroll</button>
+                </div>
+                <div id="logs" class="console-box">Console Initialized...</div>
+            </div>
+        </div>
+
+        <div id="page-accounts" class="hidden space-y-4">
+            <div class="card-bg p-6 border-t-2 border-purple-500">
+                <h3 class="text-purple-400 font-bold mb-4 uppercase text-xs tracking-widest">Account Setup</h3>
+                <input id="name" type="text" placeholder="Bot Nickname" class="w-full p-4 rounded-xl mb-3 outline-none">
+                <input id="uid" type="text" placeholder="Player UID" class="w-full p-4 rounded-xl mb-3 outline-none">
+                <input id="pw" type="password" placeholder="Password" class="w-full p-4 rounded-xl mb-4 outline-none">
+                <button onclick="saveAcc()" class="btn-op bg-purple-700 text-white p-4 hover:bg-purple-600 shadow-lg shadow-purple-900/20">SAVE CONFIGURATION</button>
+            </div>
+        </div>
+
+        <div id="page-friends" class="hidden space-y-4">
+            <div class="card-bg p-6 border-t-2 border-fuchsia-500">
+                <div class="flex gap-2 mb-4 bg-black/30 p-1 rounded-xl border border-purple-500/20">
+                    <button onclick="tabFriend('check')" id="tab-check" class="flex-1 py-2 rounded-lg bg-purple-700 text-xs font-bold transition-all">LIST</button>
+                    <button onclick="tabFriend('add')" id="tab-add" class="flex-1 py-2 rounded-lg text-gray-500 text-xs font-bold transition-all">ADD</button>
+                </div>
+                <div id="sec-check" class="space-y-3">
+                    <button onclick="fetchFriendList()" class="w-full bg-purple-600/10 text-purple-300 p-4 rounded-xl text-xs font-bold border border-purple-500/20 hover:bg-purple-600/20 transition">FETCH LIST</button>
+                    <div id="nickname-list" class="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto pr-1"></div>
+                </div>
+                <div id="sec-add" class="hidden space-y-3">
+                    <input id="target-uid" type="text" placeholder="Target UID" class="w-full p-4 rounded-xl outline-none border border-purple-500/20">
+                    <button onclick="addFriend()" class="btn-op bg-purple-700 text-white hover:bg-purple-600">SEND REQUEST</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="page-clan" class="hidden space-y-4">
+            <div class="card-bg p-6 border-t-2 border-violet-500">
+                <h3 class="text-purple-400 font-bold mb-4 uppercase text-xs tracking-widest">🛡️ Clan Search</h3>
+                <div class="space-y-3">
+                    <input id="guild-id" type="text" placeholder="Enter Guild ID" class="w-full p-4 rounded-xl outline-none">
+                    <select id="region" class="w-full p-4 rounded-xl text-sm outline-none">
+                        <option value="bd">Bangladesh (BD)</option>
+                        <option value="ind">India (IND)</option>
+                        <option value="sg">Singapore (SG)</option>
+                        <option value="br">Brazil (BR)</option>
+                        <option value="id">Indonesia (ID)</option>
+                        <option value="th">Thailand (TH)</option>
+                        <option value="vn">Vietnam (VN)</option>
+                        <option value="me">Middle East (ME)</option>
+                        <option value="pk">Pakistan (PK)</option>
+                        <option value="na">North America (NA)</option>
+                        <option value="sac">South America (SAC)</option>
+                        <option value="eu">Europe (EU)</option>
+                        <option value="ru">Russia (RU)</option>
+                        <option value="tw">Taiwan (TW)</option>
+                    </select>
+
+                    <div class="grid grid-cols-2 gap-2">
+                        <button onclick="guildApi('info')" class="btn-op btn-util">INFO</button>
+                        <button onclick="guildApi('members')" class="btn-op btn-util">MEMBERS</button>
+                        <button onclick="guildApi('join')" class="btn-op btn-util text-purple-400 border-purple-900/50">JOIN</button>
+                        <button onclick="guildApi('leave')" class="btn-op btn-util text-fuchsia-400 border-fuchsia-900/50">LEAVE</button>
+                    </div>
+                </div>
+            </div>
+            <div id="clan-result" class="card-bg p-4 min-h-[100px] text-xs overflow-y-auto font-mono text-purple-200/60"></div>
+        </div>
+
+        <div id="page-admin" class="hidden space-y-4">
+            <div class="card-bg p-6 border-t-2 border-purple-600">
+                <h3 class="text-purple-400 font-bold mb-4 uppercase text-xs tracking-widest">🛠️ Master Admin Panel</h3>
+                <div id="admin-login-sec">
+                    <input id="adm-pw" type="password" placeholder="Admin Passkey" class="w-full p-4 rounded-xl mb-3 text-center border border-purple-500/20">
+                    <button onclick="adminAction('login')" class="btn-op bg-purple-900/30 text-purple-400 border border-purple-500/30">LOGIN ADMIN</button>
+                </div>
+                <div id="admin-config-sec" class="hidden space-y-5">
+                    <div class="p-4 bg-black/40 rounded-2xl border border-purple-500/20">
+                        <div class="flex justify-between items-center mb-2">
+                            <p class="text-[9px] text-purple-300 uppercase">Global Duration (Min)</p>
+                            <p class="text-[10px] text-fuchsia-400 font-bold">Active: <span id="current-global-time">--</span>m</p>
+                        </div>
+                        <div class="flex gap-2">
+                            <input id="new-duration" type="number" placeholder="Enter minutes" class="w-2/3 rounded-lg p-2 text-xs">
+                            <button onclick="saveGlobal()" class="w-1/3 bg-purple-700 rounded-lg text-[10px] font-bold">SET</button>
+                        </div>
+                    </div>
+                    <div id="active-user-list" class="space-y-2 max-h-60 overflow-y-auto pr-1"></div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const socket = io();
+        let countdown;
+
+        function toggleMenu() {
+            document.getElementById('sidebar').classList.toggle('active');
+            document.getElementById('overlay').classList.toggle('active');
+        }
+
+        function showPage(p) {
+            ['control', 'accounts', 'friends', 'clan', 'admin'].forEach(pg => {
+                const page = document.getElementById('page-'+pg);
+                if(page) page.classList.add('hidden');
+                const menu = document.getElementById('m-'+pg);
+                if(menu) menu.classList.remove('active-tab');
+            });
+            const activePage = document.getElementById('page-'+p);
+            if(activePage) activePage.classList.remove('hidden');
+            const activeMenu = document.getElementById('m-'+p);
+            if(activeMenu) activeMenu.classList.add('active-tab');
+            document.getElementById('page-title').innerText = '⚡ ' + p.toUpperCase();
+            if(window.innerWidth < 1024) toggleMenu();
+        }
+
+        function tabFriend(type) {
+            document.getElementById('sec-check').classList.toggle('hidden', type !== 'check');
+            document.getElementById('sec-add').classList.toggle('hidden', type !== 'add');
+            document.getElementById('tab-check').className = type === 'check' ? "flex-1 py-2 rounded-lg bg-purple-700 text-xs font-bold" : "flex-1 py-2 rounded-lg text-gray-500 text-xs font-bold";
+            document.getElementById('tab-add').className = type === 'add' ? "flex-1 py-2 rounded-lg bg-purple-700 text-xs font-bold" : "flex-1 py-2 rounded-lg text-gray-500 text-xs font-bold";
+        }
+
+        function msg(t) {
+            const e = document.getElementById('toast'); e.innerText = t; e.classList.add('show');
+            setTimeout(() => e.classList.remove('show'), 3000);
+        }
+
+        function saveAcc() {
+            const name = document.getElementById('name').value, uid = document.getElementById('uid').value, pw = document.getElementById('pw').value;
+            if(!name || !uid || !pw) return msg("FILL ALL FIELDS!");
+            localStorage.setItem('bot_name', name); localStorage.setItem('bot_uid', uid); localStorage.setItem('bot_pw', pw);
+            msg("CONFIGURATION SAVED!");
+        }
+
+        async function control(act) {
+            const name = localStorage.getItem('bot_name'), uid = localStorage.getItem('bot_uid'), pw = localStorage.getItem('bot_pw');
+            if(!name) return msg("SETUP NAME FIRST!");
+            try {
+                const res = await fetch('/api/control', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({action: act, name, uid, password: pw}) });
+                const d = await res.json(); msg(d.message);
+                if(d.status === 'success') updateStat(d.running, d.rem_sec);
+            } catch(e) { msg("SERVER ERROR"); }
+        }
+
+        function updateStat(run, rem = 0) {
+            const el = document.getElementById('stext');
+            el.innerText = run ? "Running" : "Stopped";
+            el.className = run ? "text-purple-400 text-xs font-bold uppercase shadow-[0_0_10px_rgba(168,85,247,0.2)]" : "text-fuchsia-500 text-xs font-bold uppercase";
+            if(run) startTimer(Math.floor(rem));
+            else { clearInterval(countdown); document.getElementById('timer-display').innerText = "0h 0m 0s"; }
+        }
+
+        function startTimer(sec) {
+            clearInterval(countdown);
+            if(sec <= 0 && sec !== -1) return;
+            function update() {
+                if(sec === -1) { document.getElementById('timer-display').innerText = "Unlimited"; return; }
+                if(sec <= 0) { clearInterval(countdown); updateStat(false); return; }
+                let h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+                document.getElementById('timer-display').innerText = `${h}h ${m}m ${s}s`;
+                sec--;
+            }
+            update(); countdown = setInterval(update, 1000);
+        }
+
+async function control(action) {
+    const name = document.getElementById('name').value;
+    const uid = document.getElementById('uid').value;
+    const pw = document.getElementById('pw').value;
+
+    if (!name || (action === 'start' && (!uid || !pw))) {
+        msg("INPUT REQUIRED");
+        return;
+    }
+
+    // Save to local storage for convenience
+    localStorage.setItem('bot_name', name);
+    localStorage.setItem('bot_uid', uid);
+    localStorage.setItem('bot_pw', pw);
+
+    try {
+        const res = await fetch('/api/control', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                action: action, 
+                name: name, 
+                uid: uid, 
+                pw: pw 
+            })
+        });
+        
+        const data = await res.json();
+        msg(data.message);
+        
+        const statusEl = document.getElementById('stext');
+        if (data.running) {
+            statusEl.innerText = "RUNNING";
+            statusEl.className = "text-green-400 font-bold";
+        } else {
+            statusEl.innerText = "STOPPED";
+            statusEl.className = "text-fuchsia-400 font-bold";
+        }
+    } catch (e) {
+        msg("CONNECTION FAILED");
+    }
+}
+
+// Log Listener
+socket.on('new_log', (m) => {
+    if (m.user === localStorage.getItem('bot_name')) {
+        const logs = document.getElementById('logs');
+        const div = document.createElement('div');
+        div.className = "mb-1 text-purple-200/70 text-[11px] border-l border-purple-500/40 pl-2";
+        div.innerText = `> ${m.msg}`;
+        logs.appendChild(div);
+        logs.scrollTop = logs.scrollHeight;
+    }
+});
+        async function guildApi(type) {
+            const gid = document.getElementById('guild-id').value;
+            const reg = document.getElementById('region').value;
+            const uid = localStorage.getItem('bot_uid');
+            const pw = localStorage.getItem('bot_pw');
+            const resBox = document.getElementById('clan-result');
+            
+            if(!gid) return msg("INPUT REQUIRED!");
+            resBox.innerHTML = `<div class="p-4 text-center animate-pulse text-purple-500 font-bold tracking-widest">📡 ESTABLISHING UPLINK...</div>`;
+
+            try {
+                const response = await fetch(`/api/proxy_guild?type=${type}&guild_id=${gid}&region=${reg}&uid=${uid}&password=${pw}`);
+                const data = await response.json();
+
+                let meta = `<div class="space-y-4 animate-in fade-in duration-500 font-mono">`;
+                
+                // HEADER METADATA
+                meta += `<div class="text-[10px] text-purple-400 opacity-80 border-b border-purple-500/20 pb-2">
+                    meta:<br>
+                    &nbsp;&nbsp;status: ${data.success !== false ? 'success' : 'failed'}<br>
+                    &nbsp;&nbsp;timestamp: ${new Date().toISOString().replace('T', ' ').substring(0, 19)}Z<br>
+                    &nbsp;&nbsp;region: ${reg.toUpperCase()}<br>
+                    &nbsp;&nbsp;action: ${type.toUpperCase()}
+                </div>`;
+
+                // ERROR HANDLING
+                if (data.success === false || data.error) {
+                    meta += `
+                    <div class="mt-4 border-l-2 border-red-500 pl-3">
+                        <p class="text-red-500 font-bold text-[11px]">system_error:</p>
+                        <p class="text-red-300 text-[10px]">⚠️ code: ${data.error || 'ACCESS_DENIED'}</p>
+                        <p class="text-gray-500 text-[9px] italic">hint: Check UID/Password or Guild Requirements</p>
+                    </div>`;
+                    resBox.innerHTML = meta + `</div>`;
+                    return;
+                }
+
+                // GUILD INFO & SEARCH RESULTS
+                if (data.GuildName) {
+                    meta += `
+                    <div class="border-l-2 border-purple-500 pl-3 space-y-1 mt-2">
+                        <p class="text-fuchsia-400 font-bold uppercase text-[11px]">guild: identity:</p>
+                        <p class="text-white">🎮 name: ${data.GuildName}</p>
+                        <p class="text-white">🆔 id: ${data.GuildId}</p>
+                        <p class="text-white">📊 level: ${data.GuildLevel}</p>
+                        <p class="text-white">📅 created_at: ${data.CreationTime}</p>
+                    </div>
+
+                    <div class="border-l-2 border-purple-500 pl-3 space-y-1">
+                        <p class="text-fuchsia-400 font-bold uppercase text-[11px]">capacity:</p>
+                        <p class="text-white">👥 current_members: ${data.CurrentMembers}</p>
+                        <p class="text-white">🚀 max_members: ${data.MaxMembers}</p>
+                        <p class="text-white">🎯 min_level_required: ${data.MinLevelReq}</p>
+                    </div>
+
+                    <div class="border-l-2 border-purple-500 pl-3 space-y-1">
+                        <p class="text-fuchsia-400 font-bold uppercase text-[11px]">progression:</p>
+                        <p class="text-white">🔥 total_activity: ${data.TotalActivityPoints}</p>
+                        <p class="text-white">⚡ weekly_activity: ${data.WeeklyActivityPoints || '0'}</p>
+                    </div>
+
+                    <div class="border-l-2 border-purple-500 pl-3 space-y-1">
+                        <p class="text-fuchsia-400 font-bold uppercase text-[11px]">branding:</p>
+                        <p class="text-white">💬 slogan: ${data.GuildSlogan || 'No Slogan'}</p>
+                        <p class="text-gray-500 text-[9px]">🕒 last_slogan_update: ${data.LastSloganChangeTime || 'N/A'}</p>
+                    </div>`;
+
+                    if (data.GuildLeader) {
+                        const leader = data.GuildLeader;
+                        meta += `
+                        <div class="border-l-2 border-fuchsia-500 pl-3 mt-4">
+                            <p class="text-fuchsia-400 font-bold uppercase text-[11px]">leader: profile:</p>
+                            <div class="my-3 relative group w-fit">
+                                <img src="${leader.AvatarUrl}" class="w-20 h-20 rounded border border-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.4)]">
+                                <div class="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
+                            </div>
+                            <p class="text-white">👤 name: ${leader.Name}</p>
+                            <p class="text-white">🆔 uid: ${leader.Uid}</p>
+                            <p class="text-white">📊 level: ${leader.Level}</p>
+                            <p class="text-white">❤️ likes: ${leader.Likes}</p>
+                            
+                        </div>`;
+                    }
+                }
+
+                // JOIN / LEAVE RESPONSE
+                if (data.message && !data.GuildName) {
+                    meta += `
+                    <div class="mt-4 border-l-2 border-green-500 pl-3 space-y-2">
+                        <p class="text-green-400 font-bold text-[11px]">command_result:</p>
+                        <p class="text-white">✅ status: REQUEST_SENT</p>
+                        <p class="text-white">💬 message: ${data.message}</p>
+                        <p class="text-gray-400 text-[10px]">🌍 node: ${data.region || reg.toUpperCase()}</p>
+                    </div>`;
+                }
+
+                // MEMBERS LIST (Optional handling if API returns list)
+                if (data.members && Array.isArray(data.members)) {
+                    meta += `<div class="mt-4 border-l-2 border-violet-500 pl-3"><p class="text-violet-400 font-bold text-[11px]">members_list:</p>`;
+                    data.members.forEach(m => {
+                        meta += `<p class="text-white text-[10px] ml-2">👤 ${m.Name} (LV.${m.Level})</p>`;
+                    });
+                    meta += `</div>`;
+                }
+
+                meta += `</div>`;
+                resBox.innerHTML = meta;
+
+            } catch (e) {
+                resBox.innerHTML = `<div class="p-4 border border-red-900/50 bg-red-900/20 text-red-500 font-bold">⚠️ SYSTEM BREACH: API OFFLINE</div>`;
+            }
+        }
+
+        async function adminAction() {
+            const pass = document.getElementById('adm-pw').value;
+            try {
+                const res = await fetch('/api/admin', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({action: 'login', password: pass}) });
+                const d = await res.json();
+                if(d.status === 'success') {
+                    document.getElementById('admin-login-sec').classList.add('hidden');
+                    document.getElementById('admin-config-sec').classList.remove('hidden');
+                    renderActiveUsers(d.users);
+                } else msg("INVALID PASSKEY!");
+            } catch(e) { msg("AUTH FAILED"); }
+        }
+
+        function renderActiveUsers(users) {
+            const container = document.getElementById('active-user-list');
+            container.innerHTML = users.length === 0 ? '<p class="text-[10px] text-gray-500 italic text-center py-4">No Sessions</p>' : '';
+            users.forEach(u => {
+                container.innerHTML += `<div class="flex justify-between items-center bg-purple-900/10 p-3 rounded-xl border border-purple-500/10">
+                    <div><p class="text-[11px] font-bold">${u.name}</p><p class="text-[9px] text-fuchsia-400">${u.rem_min}m left</p></div>
+                </div>`;
+            });
+        }
+
+let isAdmin = false;
+
+async function adminLogin() {
+    const pass = document.getElementById('adm-pw').value;
+    if(pass === "PRO-MASTER-2026") { // Client-side check for UI toggle
+        document.getElementById('admin-login-sec').classList.add('hidden');
+        document.getElementById('admin-dashboard').classList.remove('hidden');
+        isAdmin = true;
+        msg("ADMIN ACCESS GRANTED");
+    } else {
+        msg("INVALID KEY");
+    }
+}
+
+async function loadFile() {
+    const filename = document.getElementById('file-selector').value;
+    const passkey = document.getElementById('adm-pw').value;
+    
+    const res = await fetch('/api/admin/files', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ action: 'read', filename, passkey })
+    });
+    const data = await res.json();
+    if(data.status === 'success') {
+        document.getElementById('file-editor').value = data.content;
+        msg("FILE LOADED");
+    } else {
+        msg(data.message);
+    }
+}
+
+async function saveFile() {
+    if(!confirm("Warning: Saving app.py with errors will crash the server. Continue?")) return;
+    
+    const filename = document.getElementById('file-selector').value;
+    const content = document.getElementById('file-editor').value;
+    const passkey = document.getElementById('adm-pw').value;
+    
+    const res = await fetch('/api/admin/files', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ action: 'write', filename, content, passkey })
+    });
+    const data = await res.json();
+    msg(data.message);
+}
+
+async function control(action) {
+    const name = document.getElementById('name').value;
+    const uid = document.getElementById('uid').value; // Get UID from input
+    const pw = document.getElementById('pw').value;   // Get PW from input
+
+    if (!name || (action === 'start' && (!uid || !pw))) {
+        msg("MISSING CREDENTIALS");
+        return;
+    }
+
+    try {
+        const res = await fetch('/api/control', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                action: action, 
+                name: name, 
+                uid: uid, 
+                pw: pw 
+            })
+        });
+        
+        const data = await res.json();
+        msg(data.message);
+        
+        if (data.running) {
+            document.getElementById('stext').innerText = "RUNNING";
+            document.getElementById('stext').className = "text-green-500 font-bold";
+        } else {
+            document.getElementById('stext').innerText = "STOPPED";
+            document.getElementById('stext').className = "text-fuchsia-500 font-bold";
+        }
+    } catch (e) {
+        msg("CONNECTION ERROR");
+    }
+}
+async function sendBroadcast() {
+    const txt = prompt("Enter Global Message:");
+    if(!txt) return;
+    const passkey = document.getElementById('adm-pw').value;
+    
+    await fetch('/api/admin/broadcast', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ message: txt, passkey })
+    });
+}
+
+// Socket Listeners
+socket.on('user_count', (d) => {
+    const el = document.getElementById('live-user-count');
+    if(el) el.innerText = d.count;
+});
+
+socket.on('broadcast_msg', (d) => {
+    // Show broadcast to everyone as a persistent toast
+    const toast = document.getElementById('toast');
+    toast.innerHTML = `<span class="text-fuchsia-500">📢 GLOBAL:</span> ${d.message}`;
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 10000);
+});
+        
+async function addFriend() {
+            const u = localStorage.getItem('bot_uid');
+            const p = localStorage.getItem('bot_pw');
+            const f_uid = document.getElementById('target-uid').value;
+            const resBox = document.getElementById('nickname-list'); // Or a dedicated result box
+
+            if (!u || !p || !f_uid) return msg("UID/PASS OR TARGET MISSING!");
+            
+            resBox.innerHTML = `<p class='text-center animate-pulse text-fuchsia-500 font-bold'>📡 SENDING PACKET...</p>`;
+
+            try {
+                // NEW RIZERX API ENDPOINT
+                const url = `https://rizerxaddfriend.vercel.app/adding_friend?uid=${u}&password=${p}&friend_uid=${f_uid}`;
+                const r = await fetch(url);
+                const d = await r.json();
+
+                let meta = `<div class="space-y-2 p-3 bg-black/40 border-l-2 border-fuchsia-600 font-mono text-[10px] animate-in slide-in-from-right-2">`;
+                
+                meta += `<p class="text-fuchsia-400 font-bold uppercase">friend_request: status: ${d.status}</p>`;
+
+                if (d.status === 'success') {
+                    meta += `
+                    <p class="text-white">👤 nickname: ${d.nickname}</p>
+                    <p class="text-white">🆔 uid: ${d.uid}</p>
+                    <p class="text-white">📊 level: ${d.level}</p>
+                    <p class="text-white">❤️ likes: ${d.likes}</p>
+                    <p class="text-white">🌍 region: ${d.region}</p>
+                    <p class="text-gray-500 mt-2 italic">🕒 time: ${d.time}</p>
+                    <p class="text-purple-500 text-[8px]">ver: ${d.release_version}</p>`;
+                    msg("REQUEST SENT SUCCESS");
+                } else {
+                    meta += `<p class="text-red-500">⚠ ERROR: ${d.message || 'TARGET REJECTED'}</p>`;
+                    msg("REQUEST FAILED");
+                }
+
+                meta += `</div>`;
+                resBox.innerHTML = meta;
+
+            } catch (e) {
+                resBox.innerHTML = `<p class="text-red-500 font-bold uppercase">SIGNAL LOST: RIZERX API OFFLINE</p>`;
+            }
+        }
+        async function fetchFriendList() {
+            const u = localStorage.getItem('bot_uid');
+            const p = localStorage.getItem('bot_pw');
+            const box = document.getElementById('nickname-list');
+            
+            if(!u || !p) return msg("SETUP ACCOUNT PROTOCOL FIRST!");
+            
+            box.innerHTML = "<div class='col-span-2 text-center text-purple-500 animate-pulse font-bold p-4'>📡 DECRYPTING FRIEND DATABASE...</div>";
+            
+            try {
+                const r = await fetch(`https://danger-friend-management.vercel.app/get_friends_list?uid=${u}&password=${p}`);
+                const d = await r.json();
+                
+                if(!d.success) {
+                    box.innerHTML = `<div class='col-span-2 p-3 bg-red-900/20 text-red-400 text-[10px] border border-red-500/30'>⚠ AUTHENTICATION FAILED: ${d.message || 'INVALID LOGIN'}</div>`;
+                    return;
+                }
+
+                let html = `
+                    <div class="col-span-2 mb-4 p-3 bg-purple-900/20 border-l-2 border-fuchsia-500 rounded-r-xl">
+                        <p class="text-[10px] text-purple-400 uppercase font-bold">session_owner:</p>
+                        <p class="text-white text-sm font-bold">👤 ${d.nickname}</p>
+                        <p class="text-[9px] text-gray-400">🆔 UID: ${d.your_uid} | 🌍 REGION: ${d.region}</p>
+                        <p class="text-[9px] text-fuchsia-400">📊 TOTAL_FRIENDS: ${d.total_friends}</p>
+                    </div>
+                `;
+
+                d.friends.forEach(f => {
+                    html += `
+                        <div class="bg-black/40 p-3 rounded-lg border border-purple-500/10 hover:border-purple-500/40 transition-all group">
+                            <div class="flex justify-between items-start mb-1">
+                                <span class="text-white font-bold text-[11px] truncate w-24 group-hover:text-fuchsia-400">${f.nickname}</span>
+                                <span class="text-[9px] bg-purple-600/30 px-1 rounded text-purple-200">LV.${f.level}</span>
+                            </div>
+                            <div class="space-y-1 opacity-70">
+                                <p class="text-[8px] text-gray-300">🆔 ${f.uid}</p>
+                                <p class="text-[8px] text-yellow-500">🏆 BR: ${f.brRankPoints} | ⭐ CS: ${f.csRankStars}</p>
+                                <p class="text-[8px] text-blue-400 truncate">🛡️ ${f.guildName || 'NO GUILD'}</p>
+                            </div>
+                        </div>
+                    `;
+                });
+
+                box.innerHTML = html;
+                msg(`SYNCED ${d.total_friends} CONTACTS`);
+
+            } catch(e) { 
+                box.innerHTML = "<div class='col-span-2 text-center text-red-500 font-bold p-4'>⚠️ UPLINK INTERRUPTED</div>";
+                msg("FETCH FAILED"); 
+            }
+        }
+
+        window.onload = () => {
+            document.getElementById('name').value = localStorage.getItem('bot_name') || "";
+            document.getElementById('uid').value = localStorage.getItem('bot_uid') || "";
+            document.getElementById('pw').value = localStorage.getItem('bot_pw') || "";
+        };
+
+        socket.on('new_log', (m) => {
+            if (m.user === localStorage.getItem('bot_name')) {
+                const l = document.getElementById('logs'), d = document.createElement('div');
+                d.className = "mb-1 text-purple-200/60 border-l-2 border-purple-500/30 pl-2"; d.innerText = `[${new Date().toLocaleTimeString()}] ${m.data}`;
+                l.appendChild(d); l.scrollTop = l.scrollHeight;
+            }
+        });
+    </script>
+</body>
+</html>
