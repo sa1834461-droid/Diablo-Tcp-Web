@@ -14,3 +14,6 @@ aiohttp
 cfonts
 flask-socketio
 eventlet
+requests
+python-engineio==4.3.1
+python-socketio==5.5.0
